@@ -89,14 +89,28 @@ async function fetchAndStoreBooksForYearRange(fromYear, toYear) {
                 continue;
             }
 
-            // Prepare all books data for bulk insert
-            const booksData = data.data.map(book => [
-                book.id,
-                cleanTitle(book.title),
-                cleanAuthor(book.primaryAgent?.label),
-                book.identifiers?.isbn || null,
-                book.coverUrl?.medium || null
-            ]);
+            // Prepare all books data for bulk insert, filtering out incomplete records
+            const booksData = data.data
+                .filter(book => 
+                    book.title && 
+                    book.primaryAgent?.label && 
+                    book.identifiers?.isbn && 
+                    book.coverUrl?.medium
+                )
+                .map(book => [
+                    book.id,
+                    cleanTitle(book.title),
+                    cleanAuthor(book.primaryAgent.label),
+                    book.identifiers.isbn,
+                    book.coverUrl.medium
+                ]);
+
+            // Skip if no valid books in this batch
+            if (booksData.length === 0) {
+                console.log(`Page ${pageNum} had no valid books, continuing...`);
+                pageNum++;
+                continue;
+            }
 
             // Bulk insert/update query
             const query = `
