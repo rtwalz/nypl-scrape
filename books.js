@@ -145,13 +145,22 @@ async function fetchAndStoreBooks() {
     const currentYear = new Date().getFullYear();
     const startYear = 1989;
 
-    for (let year = startYear; year < currentYear; year++) {
-        await fetchAndStoreBooksForYearRange(year, year + 1);
-        // Add a small delay between year ranges
-        await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+        for (let year = startYear; year < currentYear; year++) {
+            await fetchAndStoreBooksForYearRange(year, year + 1);
+            // Add a small delay between year ranges
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+        
+        console.log('Completed fetching books for all years');
+    } finally {
+        // Close the connection pool and exit the process
+        await pool.end();
+        process.exit(0);
     }
-    
-    console.log('Completed fetching books for all years');
 }
 
-fetchAndStoreBooks();
+fetchAndStoreBooks().catch(error => {
+    console.error('Fatal error:', error);
+    pool.end().then(() => process.exit(1));
+});
