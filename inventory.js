@@ -101,7 +101,7 @@ async function updateAllInventory() {
                         if (diff > 0) {
                             // Add a checkout record for each decrease in inventory
                             for (let i = 0; i < diff; i++) {
-                                checkouts.push([result.id, new Date()]);
+                                checkouts.push([result.id]);
                             }
                         }
                     }
@@ -113,8 +113,11 @@ async function updateAllInventory() {
                     
                     // Insert checkout records if any exist
                     if (checkouts.length > 0) {
-                        const checkoutSql = 'INSERT INTO nypl_checkouts (book_id, timestamp) VALUES ?';
-                        await connection.query(checkoutSql, [checkouts]);
+                        const checkoutSql = 'INSERT INTO nypl_checkouts (book_id, timestamp) VALUES (?, NOW())';
+                        // Use promise.all to execute all inserts
+                        await Promise.all(checkouts.map(checkout => 
+                            connection.query(checkoutSql, checkout)
+                        ));
                         console.log(`Recorded ${checkouts.length} new checkouts`);
                     }
                 }
