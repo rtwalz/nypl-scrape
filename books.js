@@ -47,16 +47,17 @@ function cleanAuthor(author) {
         .join(' ');
 }
 
-async function fetchAndStoreBooksForYearRange(fromYear, toYear) {
+async function fetchAndStoreBooksForYear(year) {
+    let pageNum = 1;
+
     try {
-        let pageNum = 1;
         let totalProcessed = 0;
-        let hasMoreResults = true;
         const pageSize = 100;
+        let totalPages = 1;
 
-        console.log(`Starting fetch for years ${fromYear}-${toYear}`);
+        console.log(`Starting fetch for publication year ${year}`);
 
-        while (hasMoreResults) {
+        while (pageNum <= totalPages) {
             const response = await fetch('https://na2.iiivega.com/api/search-result/search/format-groups', {
                 method: 'POST',
                 headers: {
@@ -77,32 +78,31 @@ async function fetchAndStoreBooksForYearRange(fromYear, toYear) {
                     locationIds: ["jm"],
                     pageNum: pageNum,
                     pageSize: pageSize,
-                    dateFrom: fromYear.toString(),
-                    dateTo: toYear.toString()
+                    dateFrom: year.toString(),
+                    dateTo: year.toString()
                 })
             });
 
+            if (!response.ok) {
+                throw new Error(`NYPL API returned ${response.status} ${response.statusText}`);
+            }
+
             const data = await response.json();
+            totalPages = data.totalPages || totalPages;
             
             if (!data.data || data.data.length === 0) {
-                hasMoreResults = false;
-                continue;
+                break;
             }
 
             // Prepare all books data for bulk insert, filtering out incomplete records
             const booksData = data.data
-                .filter(book => 
-                    book.title && 
-                    book.primaryAgent?.label && 
-                    book.identifiers?.isbn && 
-                    book.coverUrl?.medium
-                )
+                .filter(book => book.title)
                 .map(book => [
                     book.id,
                     cleanTitle(book.title),
-                    cleanAuthor(book.primaryAgent.label),
-                    book.identifiers.isbn,
-                    book.coverUrl.medium
+                    cleanAuthor(book.primaryAgent?.label || null),
+                    book.identifiers?.isbn || null,
+                    book.coverUrl?.medium || null
                 ]);
 
             // Skip if no valid books in this batch
@@ -134,20 +134,29 @@ async function fetchAndStoreBooksForYearRange(fromYear, toYear) {
             pageNum++;
         }
 
-        console.log(`Finished processing years ${fromYear}-${toYear}. Total processed: ${totalProcessed}`);
+        console.log(`Finished processing publication year ${year}. Total processed: ${totalProcessed}`);
     } catch (error) {
-        console.error(`Error fetching or storing books for years ${fromYear}-${toYear}:`, error);
+        console.error(`Error fetching or storing books for publication year ${year}:`, error);
         console.error('Failed at page:', pageNum);
     }
 }
 
 async function fetchAndStoreBooks() {
     const currentYear = new Date().getFullYear();
-    const startYear = 1989;
+    const startYear = Number(process.env.NYPL_START_YEAR || 1989);
+    const endYear = Number(process.env.NYPL_END_YEAR || currentYear);
 
     try {
-        for (let year = startYear; year < currentYear; year++) {
-            await fetchAndStoreBooksForYearRange(year, year + 1);
+        if (!Number.isInteger(startYear) || !Number.isInteger(endYear)) {
+            throw new Error('NYPL_START_YEAR and NYPL_END_YEAR must be whole numbers');
+        }
+
+        if (startYear > endYear) {
+            throw new Error('NYPL_START_YEAR cannot be greater than NYPL_END_YEAR');
+        }
+
+        for (let year = endYear; year >= startYear; year--) {
+            await fetchAndStoreBooksForYear(year);
             // Add a small delay between year ranges
             await new Promise(resolve => setTimeout(resolve, 2000));
         }

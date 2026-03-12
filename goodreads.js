@@ -27,6 +27,9 @@ async function updateBooksFromGoodreads() {
 
                 // Fetch data from Goodreads
                 const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Goodreads API returned ${response.status} ${response.statusText}`);
+                }
                 const xml = await response.text();
 
                 // Parse XML response
@@ -67,8 +70,13 @@ async function updateBooksFromGoodreads() {
         }
     } catch (error) {
         console.error('Error in updateBooksFromGoodreads:', error);
+    } finally {
+        await pool.end();
     }
 }
 
 // Run the update function
-updateBooksFromGoodreads();
+updateBooksFromGoodreads().catch(error => {
+    console.error('Fatal error:', error);
+    process.exitCode = 1;
+});
